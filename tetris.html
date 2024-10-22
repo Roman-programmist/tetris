@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Тетрис</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            background-color: #000;
+            color: white;
+            font-family: Arial, sans-serif;
+            position: relative;
+            overflow: hidden; /* Скрываем переполнение */
+        }
+
+        #loading-screen {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background-color: #000;
+            display: none; /* Скрываем экран загрузки по умолчанию */
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #loader {
+            width: 300px; /* Увеличиваем длину ползунка */
+            height: 10px;
+            background-color: white;
+            position: relative;
+            overflow: hidden; /* Скрываем переполнение */
+        }
+
+        #slider {
+            width: 100%; /* Ползунок занимает всю ширину контейнера */
+            height: 100%;
+            background-color: white;
+            position: absolute;
+            left: -100%; /* Начальная позиция ползунка */
+            animation: load 3s forwards; /* Анимация загрузки на 3 секунды */
+        }
+
+        @keyframes load {
+            to {
+                left: 100%; /* Ползунок движется вправо на 100% */
+            }
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+
+        #score {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            font-size: 24px;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border-radius: 8px;
+            border: 2px solid #fff;
+            display: none; /* Скрываем счет до начала игры */
+        }
+
+        #game-container {
+            display: none; /* Скрываем контейнер игры по умолчанию */
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+        }
+
+        canvas {
+            border: 2px solid #fff;
+            background-color: #222;
+            margin: 20px 0; /* Добавляем отступы сверху и снизу */
+            border-radius: 8px;
+        }
+
+        #start-button, #pause-button, #restart-button {
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            padding: 20px 40px; /* Увеличиваем размер кнопки */
+            font-size: 24px; /* Увеличиваем шрифт кнопки */
+            cursor: pointer;
+            margin-top: 10px; /* Увеличиваем отступ между кнопками */
+            transition: background-color 0.3s;
+        }
+
+        #start-button:hover, #pause-button:hover, #restart-button:hover {
+            background-color: #218838;
+        }
+
+        #start-button:active, #pause-button:active, #restart-button:active {
+            background-color: #1e7e34;
+        }
+
+        #restart-button {
+            display: none; /* Скрываем кнопку "Начать заново" по умолчанию */
+        }
+    </style>
+</head>
+<body>
+    <div id="loading-screen">
+        <h1>Загрузка...</h1>
+        <div id="loader">
+            <div id="slider"></div>
+        </div>
+    </div>
+    <h1 id="title" style="display: none;">Тетрис</h1>
+    <div id="score">Счет: 0</div>
+    <div id="game-container">
+        <button id="pause-button" style="display: none;">Пауза</button>
+        <canvas id="tetris" width="300" height="600"></canvas>
+    </div>
+    <button id="start-button">Начать игру</button>
+    <button id="restart-button">Начать заново</button> <!-- Кнопка "Начать заново" -->
+
+    <script>
+        const canvas = document.getElementById('tetris');
+        const context = canvas.getContext('2d');
+        const title = document.getElementById('title'); // Получаем заголовок
+        const loadingScreen = document.getElementById('loading-screen'); // Получаем экран загрузки
+        const loader = document.getElementById('loader'); // Получаем загрузчик
+
+        context.scale(30, 30); // Масштабируем размеры для удобства
+
+        let board, currentPiece, dropInterval, isGameOver, isPaused, score;
+
+        const pieces = [
+            [[1, 1, 1], [0, 1, 0]], // T
+            [[1, 1], [1, 1]],       // O
+            [[1, 1, 0], [0, 1, 1]], // S
+            [[0, 1, 1], [1, 1, 0]], // Z
+            [[1, 1, 1, 1]],         // I
+            [[1, 1, 1], [1, 0, 0]], // L
+            [[1, 1, 1], [0, 0, 1]]  // J
+        ];
+
+        function draw() {
+            context.clearRect(0, 0, canvas.width, canvas.height);
+            drawBoard();
+            drawPiece(currentPiece);
+        }
+
+        function drawBoard() {
+            for (let row = 0; row < board.length; row++) {
+                for (let col = 0; col < board[row].length; col++) {
+                    if (board[row][col]) {
+                        context.fillStyle = 'white';
+                        context.fillRect(col, row, 1, 1);
+                    }
+                }
+            }
+        }
+
+        function drawPiece(piece) {
+            piece.shape.forEach((row, y) => {
+                row.forEach((value, x) => {
+                    if (value) {
+                        context.fillStyle = 'cyan';
+                        context.fillRect(piece.position.x + x, piece.position.y + y, 1, 1);
+                    }
+                });
+            });
+        }
+
+        function rotatePiece() {
+            const originalShape = currentPiece.shape;
+            currentPiece.shape = currentPiece.shape[0].map((_, index) =>
+                currentPiece.shape.map(row => row[index]).reverse()
+            );
+
+            if (collides()) {
+                currentPiece.shape = originalShape; // Возвращаем обратно, если столкновение
+            }
+        }
+
+        function collides() {
+            return currentPiece.shape.some((row, y) => {
+                return row.some((value, x) => {
+                    if (value) {
+                        const newX = currentPiece.position.x + x;
+                        const newY = currentPiece.position.y + y;
+                        return (
+                            newX < 0 || newX >= 10 || newY >= 20 || (newY >= 0 && board[newY][newX])
+                        );
+                    }
+                    return false;
+                });
+            });
+        }
+
+        function merge() {
+            currentPiece.shape.forEach((row, y) => {
+                row.forEach((value, x) => {
+                    if (value) {
+                        board[currentPiece.position.y + y][currentPiece.position.x + x] = 1;
+                    }
+                });
+            });
+        }
+
+        function removeLines() {
+            let linesRemoved = 0; // Счетчик удаленных линий
+            board = board.reduce((acc, row) => {
+                if (row.every(value => value)) {
+                    acc.unshift(Array(10).fill(0)); // Добавляем новую строку сверху
+                    linesRemoved++; // Увеличиваем счетчик
+                } else {
+                    acc.push(row);
+                }
+                return acc;
+            }, []);
+            score += linesRemoved; // Увеличиваем счет на количество удаленных линий
+            document.getElementById('score').innerText = `Счет: ${score}`; // Обновляем отображение счета
+        }
+
+        function drop() {
+            currentPiece.position.y++;
+            if (collides()) {
+                currentPiece.position.y--;
+                merge();
+                removeLines();
+                spawnPiece();
+                if (collides()) {
+                    isGameOver = true;
+                    clearInterval(dropInterval);
+                    alert('Игра окончена! Ваш счет: ' + score);
+                    document.getElementById('start-button').style.display = 'none'; // Скрываем кнопку "Начать игру"
+                    document.getElementById('restart-button').style.display = 'block'; // Показываем кнопку "Начать заново"
+                    document.getElementById('game-container').style.display = 'none'; // Скрываем поле игры
+                    document.getElementById('score').style.display = 'none'; // Скрываем счет
+                    title.style.display = 'block'; // Показываем заголовок снова
+                }
+            }
+        }
+
+        function spawnPiece() {
+            const randomIndex = Math.floor(Math.random() * pieces.length);
+            currentPiece = {
+                shape: pieces[randomIndex],
+                position: { x: 3, y: 0 }
+            };
+        }
+
+        function startGame() {
+            board = Array.from({ length: 20 }, () => Array(10).fill(0));
+            isGameOver = false;
+            isPaused = false; // Сбрасываем состояние паузы
+            score = 0; // Сбрасываем счет
+            document.getElementById('score').innerText = `Счет: ${score}`; // Обновляем отображение счета
+            document.getElementById('score').style.display = 'block'; // Показываем счет
+            document.getElementById('game-container').style.display = 'flex'; // Показываем контейнер игры
+            document.getElementById('restart-button').style.display = 'none'; // Скрываем кнопку "Начать заново"
+            title.style.display = 'none'; // Скрываем заголовок
+            spawnPiece();
+            dropInterval = setInterval(() => {
+                if (!isGameOver && !isPaused) {
+                    drop();
+                    draw();
+                }
+            }, 1000);
+            document.getElementById('pause-button').style.display = 'inline-block'; // Показываем кнопку паузы
+            document.getElementById('start-button').style.display = 'none'; // Скрываем кнопку "Начать игру"
+        }
+
+        function togglePause() {
+            isPaused = !isPaused; // Переключаем состояние паузы
+            document.getElementById('pause-button').innerText = isPaused ? 'Продолжить' : 'Пауза'; // Изменяем текст кнопки
+        }
+
+        function restartGame() {
+            // Сбрасываем состояние и запускаем новую игру
+            document.getElementById('start-button').style.display = 'none'; // Скрываем кнопку "Начать игру"
+            document.getElementById('restart-button').style.display = 'none'; // Скрываем кнопку "Начать заново"
+            startLoadingScreen(); // Запускаем экран загрузки
+        }
+
+        function startLoadingScreen() {
+            loadingScreen.style.display = 'flex'; // Показываем экран загрузки
+            const slider = document.getElementById('slider');
+            slider.style.animation = 'none'; // Сбрасываем анимацию ползунка
+            slider.offsetHeight; // Перезапускаем анимацию
+            slider.style.animation = 'load 3s forwards'; // Запускаем анимацию загрузки
+            
+            setTimeout(() => {
+                loadingScreen.style.display = 'none'; // Скрываем экран загрузки после 3 секунд
+                startGame(); // Запускаем игру
+            }, 3000); // Время загрузки 3 секунды
+        }
+
+        document.getElementById('start-button').addEventListener('click', startLoadingScreen);
+        document.getElementById('pause-button').addEventListener('click', togglePause);
+        document.getElementById('restart-button').addEventListener('click', restartGame); // Обработчик события для кнопки "Начать заново"
+        
+        document.addEventListener('keydown', (event) => {
+            if (!isGameOver) {
+                switch (event.key) {
+                    case 'ArrowLeft':
+                        currentPiece.position.x--;
+                        if (collides()) currentPiece.position.x++;
+                        break;
+                    case 'ArrowRight':
+                        currentPiece.position.x++;
+                        if (collides()) currentPiece.position.x--;
+                        break;
+                    case 'ArrowDown':
+                        drop();
+                        break;
+                    case 'ArrowUp':
+                        rotatePiece();
+                        break;
+                    case 'p':
+                        togglePause(); // Пауза по нажатию клавиши 'p'
+                        break;
+                }
+                draw();
+            }
+        });
+    </script>
+</body>
+</html>
